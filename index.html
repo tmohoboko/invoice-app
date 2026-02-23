@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Invoice Management System</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#07080c;--surface:#0f1117;--card:#161822;--border:#232538;
+    --text:#e4e3ea;--muted:#7d7b96;--accent:#3b82f6;--accent2:#f59e0b;
+    --green:#22c55e;--red:#ef4444;--purple:#a855f7;--cyan:#06b6d4;
+  }
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;overflow-x:hidden}
+
+  /* --- NAV --- */
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+  .topbar h1{font-size:18px;font-weight:600;letter-spacing:1px}
+  .topbar h1 span{color:var(--accent)}
+  .nav-tabs{display:flex;gap:4px}
+  .nav-tab{background:none;border:1px solid transparent;color:var(--muted);padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px;transition:all .2s}
+  .nav-tab:hover{color:var(--text);background:var(--card)}
+  .nav-tab.active{color:var(--accent);border-color:var(--accent);background:rgba(59,130,246,.08)}
+
+  /* --- LAYOUT --- */
+  .page{display:none;padding:20px;max-width:1400px;margin:0 auto}
+  .page.active{display:block}
+  .grid{display:grid;gap:16px}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  @media(max-width:900px){.g2,.g3,.g4{grid-template-columns:1fr}}
+
+  /* --- CARDS --- */
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;opacity:0;transform:translateY(20px)}
+  .card h3{font-size:14px;color:var(--muted);margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px}
+  .card.full{grid-column:1/-1}
+  .stat-val{font-size:32px;font-weight:700}
+  .stat-label{font-size:12px;color:var(--muted);margin-top:4px}
+  .stat-change{font-size:12px;margin-top:6px}
+  .stat-change.up{color:var(--green)}
+  .stat-change.down{color:var(--red)}
+
+  /* --- 3D --- */
+  #revenue-3d{width:100%;height:420px;border-radius:8px;overflow:hidden;cursor:grab}
+  #revenue-3d:active{cursor:grabbing}
+  .three-legend{display:flex;gap:16px;margin-top:10px;flex-wrap:wrap}
+  .three-legend span{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+  .three-legend i{width:10px;height:10px;border-radius:2px;display:inline-block}
+
+  /* --- TABLE --- */
+  .tbl{width:100%;border-collapse:collapse;font-size:13px}
+  .tbl th{text-align:left;padding:10px 12px;color:var(--muted);font-weight:500;border-bottom:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  .tbl td{padding:10px 12px;border-bottom:1px solid rgba(35,37,56,.5)}
+  .tbl tr:hover td{background:rgba(59,130,246,.04)}
+  .badge{padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600}
+  .badge.paid{background:rgba(34,197,94,.15);color:var(--green)}
+  .badge.pending{background:rgba(245,158,11,.15);color:var(--accent2)}
+  .badge.overdue{background:rgba(239,68,68,.15);color:var(--red)}
+  .badge.draft{background:rgba(125,123,150,.15);color:var(--muted)}
+  .badge.sent{background:rgba(59,130,246,.15);color:var(--accent)}
+  .badge.recurring{background:rgba(168,85,247,.15);color:var(--purple)}
+  .badge.one-time{background:rgba(6,182,212,.15);color:var(--cyan)}
+
+  /* --- ERD --- */
+  .erd-wrap{overflow-x:auto;padding:10px 0}
+  .erd-wrap pre{font-size:11px;line-height:1.4;color:var(--accent);white-space:pre;font-family:'Cascadia Code','Fira Code',monospace}
+
+  /* --- CHART CONTAINERS --- */
+  .chart-wrap{position:relative;width:100%;max-height:280px}
+  .chart-wrap canvas{width:100%!important;max-height:280px}
+
+  /* --- FORM --- */
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .form-group{display:flex;flex-direction:column;gap:4px}
+  .form-group.full{grid-column:1/-1}
+  .form-group label{font-size:12px;color:var(--muted)}
+  .form-group input,.form-group select,.form-group textarea{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px;outline:none;transition:border .2s}
+  .form-group input:focus,.form-group select:focus{border-color:var(--accent)}
+  .btn{padding:10px 20px;border-radius:6px;border:none;cursor:pointer;font-size:13px;font-weight:600;transition:all .2s}
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-primary:hover{background:#2563eb}
+  .btn-ghost{background:none;border:1px solid var(--border);color:var(--muted)}
+  .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+  .form-actions{grid-column:1/-1;display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
+
+  /* --- LINE ITEMS --- */
+  .line-items{grid-column:1/-1;margin-top:8px}
+  .line-items table{width:100%;border-collapse:collapse;font-size:13px}
+  .line-items th{text-align:left;padding:8px;color:var(--muted);font-size:11px;text-transform:uppercase;border-bottom:1px solid var(--border)}
+  .line-items td{padding:6px 8px}
+  .line-items input{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px;outline:none}
+  .line-items input:focus{border-color:var(--accent)}
+  .add-line{color:var(--accent);background:none;border:none;cursor:pointer;font-size:12px;padding:6px 0;font-weight:600}
+  .add-line:hover{text-decoration:underline}
+  .totals-row{display:flex;justify-content:flex-end;gap:24px;margin-top:12px;font-size:14px}
+  .totals-row .label{color:var(--muted)}
+  .totals-row .val{font-weight:700}
+
+  /* --- TOAST --- */
+  .toast{position:fixed;bottom:24px;right:24px;background:var(--green);color:#fff;padding:12px 20px;border-radius:8px;font-size:13px;font-weight:600;z-index:999;opacity:0;transform:translateY(20px)}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <h1>BILL<span>FLOW</span> &mdash; Invoice Management</h1>
+  <div class="nav-tabs">
+    <button class="nav-tab active" data-page="dashboard">Dashboard</button>
+    <button class="nav-tab" data-page="revenue3d">3D Revenue</button>
+    <button class="nav-tab" data-page="invoices">Invoices</button>
+    <button class="nav-tab" data-page="create">New Invoice</button>
+    <button class="nav-tab" data-page="erd">ERD Schema</button>
+  </div>
+</div>
+
+<!-- ========== DASHBOARD ========== -->
+<div class="page active" id="pg-dashboard">
+  <div class="grid g4" style="margin-bottom:16px">
+    <div class="card" id="stat1"><div class="stat-val">$184K</div><div class="stat-label">Revenue This Month</div><div class="stat-change up">+14.2% vs last month</div></div>
+    <div class="card" id="stat2"><div class="stat-val">$47K</div><div class="stat-label">Outstanding</div><div class="stat-change down">+$8K overdue</div></div>
+    <div class="card" id="stat3"><div class="stat-val">312</div><div class="stat-label">Invoices Sent (YTD)</div><div class="stat-change up">+23 this month</div></div>
+    <div class="card" id="stat4"><div class="stat-val">4.2d</div><div class="stat-label">Avg Days to Pay</div><div class="stat-change up">-1.3d improvement</div></div>
+  </div>
+  <div class="grid g2">
+    <div class="card"><h3>Revenue vs Collected (Monthly)</h3><div class="chart-wrap"><canvas id="chartRevenue"></canvas></div></div>
+    <div class="card"><h3>Invoice Status Breakdown</h3><div class="chart-wrap"><canvas id="chartStatus"></canvas></div></div>
+    <div class="card"><h3>Top Clients by Revenue</h3><div class="chart-wrap"><canvas id="chartClients"></canvas></div></div>
+    <div class="card"><h3>Aging Receivables</h3><div class="chart-wrap"><canvas id="chartAging"></canvas></div></div>
+  </div>
+</div>
+
+<!-- ========== 3D REVENUE ========== -->
+<div class="page" id="pg-revenue3d">
+  <div class="card" style="opacity:1;transform:none">
+    <h3>3D Revenue Cityscape &mdash; Each Building = Client Annual Revenue</h3>
+    <div id="revenue-3d"></div>
+    <div class="three-legend">
+      <span><i style="background:#3b82f6"></i> Enterprise</span>
+      <span><i style="background:#22c55e"></i> SMB</span>
+      <span><i style="background:#f59e0b"></i> Freelance</span>
+      <span><i style="background:#a855f7"></i> Government</span>
+      <span><i style="background:#ef4444"></i> Overdue Balance</span>
+    </div>
+  </div>
+</div>
+
+<!-- ========== INVOICES ========== -->
+<div class="page" id="pg-invoices">
+  <div class="card full" style="opacity:1;transform:none">
+    <h3>All Invoices</h3>
+    <table class="tbl">
+      <thead><tr><th>Invoice #</th><th>Client</th><th>Issued</th><th>Due</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Type</th><th>Status</th></tr></thead>
+      <tbody id="tbl-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ========== NEW INVOICE ========== -->
+<div class="page" id="pg-create">
+  <div class="card full" style="opacity:1;transform:none">
+    <h3>Create Invoice</h3>
+    <form id="invoice-form" class="form-grid">
+      <div class="form-group"><label>Client</label><select id="f-client"><option>Acme Corp</option><option>Globex Industries</option><option>Initech LLC</option><option>Umbrella Co</option><option>Stark Enterprises</option><option>Wayne Industries</option></select></div>
+      <div class="form-group"><label>Invoice Number</label><input type="text" id="f-invnum" value="INV-0313" readonly style="color:var(--muted)"></div>
+      <div class="form-group"><label>Issue Date</label><input type="date" id="f-issued" value="2026-02-17"></div>
+      <div class="form-group"><label>Due Date</label><input type="date" id="f-due" value="2026-03-19"></div>
+      <div class="form-group"><label>Payment Terms</label><select id="f-terms"><option>Net 30</option><option>Net 15</option><option>Net 60</option><option>Due on Receipt</option></select></div>
+      <div class="form-group"><label>Currency</label><select id="f-currency"><option>USD</option><option>EUR</option><option>GBP</option><option>CAD</option></select></div>
+      <div class="line-items">
+        <table>
+          <thead><tr><th>Description</th><th style="width:80px">Qty</th><th style="width:110px">Unit Price</th><th style="width:100px">Total</th></tr></thead>
+          <tbody id="line-body">
+            <tr><td><input type="text" placeholder="Service or product..."></td><td><input type="number" class="qty" value="1" min="1"></td><td><input type="number" class="price" value="0" step="0.01"></td><td class="line-total" style="padding:6px 8px;color:var(--text)">$0.00</td></tr>
+          </tbody>
+        </table>
+        <button type="button" class="add-line" id="add-line-btn">+ Add Line Item</button>
+        <div class="totals-row">
+          <div><span class="label">Subtotal: </span><span class="val" id="subtotal">$0.00</span></div>
+          <div><span class="label">Tax (8%): </span><span class="val" id="tax">$0.00</span></div>
+          <div><span class="label">Total: </span><span class="val" id="grand-total" style="color:var(--accent);font-size:16px">$0.00</span></div>
+        </div>
+      </div>
+      <div class="form-group full"><label>Notes / Memo</label><textarea id="f-notes" rows="2" placeholder="Payment instructions, thank you message..."></textarea></div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-ghost" onclick="showToast('Draft saved')">Save Draft</button>
+        <button type="submit" class="btn btn-primary">Send Invoice</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ========== ERD ========== -->
+<div class="page" id="pg-erd">
+  <div class="card full" style="opacity:1;transform:none">
+    <h3>Entity Relationship Diagram</h3>
+    <div class="erd-wrap"><pre id="erd-pre"></pre></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+//  DATA
+// ============================================================
+const MONTHS = ['Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb'];
+const INVOICES = [
+  {id:'INV-0312',client:'Acme Corp',issued:'2026-02-15',due:'2026-03-17',amount:18500,paid:18500,type:'recurring',status:'paid'},
+  {id:'INV-0311',client:'Globex Industries',issued:'2026-02-12',due:'2026-03-14',amount:42000,paid:0,type:'one-time',status:'sent'},
+  {id:'INV-0310',client:'Initech LLC',issued:'2026-02-10',due:'2026-02-25',amount:7200,paid:3600,type:'recurring',status:'pending'},
+  {id:'INV-0309',client:'Umbrella Co',issued:'2026-02-08',due:'2026-02-08',amount:31400,paid:31400,type:'one-time',status:'paid'},
+  {id:'INV-0308',client:'Stark Enterprises',issued:'2026-02-05',due:'2026-03-07',amount:95000,paid:50000,type:'recurring',status:'pending'},
+  {id:'INV-0307',client:'Wayne Industries',issued:'2026-02-01',due:'2026-03-03',amount:64000,paid:64000,type:'one-time',status:'paid'},
+  {id:'INV-0306',client:'Acme Corp',issued:'2026-01-28',due:'2026-02-12',amount:18500,paid:18500,type:'recurring',status:'paid'},
+  {id:'INV-0305',client:'Globex Industries',issued:'2026-01-22',due:'2026-02-06',amount:38000,paid:0,type:'one-time',status:'overdue'},
+  {id:'INV-0304',client:'Initech LLC',issued:'2026-01-18',due:'2026-02-02',amount:7200,paid:7200,type:'recurring',status:'paid'},
+  {id:'INV-0303',client:'Umbrella Co',issued:'2026-01-14',due:'2026-01-29',amount:22800,paid:0,type:'one-time',status:'overdue'},
+  {id:'INV-0302',client:'Stark Enterprises',issued:'2026-01-10',due:'2026-02-09',amount:95000,paid:95000,type:'recurring',status:'paid'},
+  {id:'INV-0301',client:'Wayne Industries',issued:'2026-01-05',due:'2026-02-04',amount:58000,paid:58000,type:'one-time',status:'paid'},
+];
+
+const ERD_TEXT = `
+┌─────────────────────┐         ┌─────────────────────┐         ┌─────────────────────┐
+│       CLIENT         │         │      INVOICE         │         │     LINE_ITEM        │
+├─────────────────────┤         ├─────────────────────┤         ├─────────────────────┤
+│ PK client_id         │         │ PK invoice_id        │         │ PK line_item_id      │
+│    company_name      │◄────────┤ FK client_id         │◄────────┤ FK invoice_id        │
+│    contact_first     │  1    N │ FK template_id       │  1    N │    description       │
+│    contact_last      │         │    invoice_number    │         │    quantity           │
+│    email             │         │    issue_date        │         │    unit_price         │
+│    phone             │         │    due_date          │         │    discount_pct       │
+│    billing_address   │         │    subtotal          │         │    tax_rate           │
+│    shipping_address  │         │    tax_amount        │         │    line_total         │
+│    tax_id            │         │    total_amount      │         └─────────────────────┘
+│    payment_terms     │         │    currency          │
+│    credit_limit      │         │    status            │         ┌─────────────────────┐
+│    notes             │         │    (draft/sent/      │         │      PAYMENT         │
+│    created_at        │         │     paid/overdue/    │         ├─────────────────────┤
+└─────────────────────┘         │     void/refunded)   │         │ PK payment_id        │
+                                 │    recurring_flag    │◄────────┤ FK invoice_id        │
+┌─────────────────────┐         │    po_number         │  1    N │    amount             │
+│    ORGANIZATION      │         │    notes             │         │    payment_date       │
+├─────────────────────┤         │    created_at        │         │    method             │
+│ PK org_id            │         └────────┬────────────┘         │    (card/bank/check/  │
+│    name              │                  │                       │     paypal/wire/      │
+│    logo_url          │                  │                       │     crypto)           │
+│    address           │                  │                       │    reference_number   │
+│    email             │                  │                       │    status             │
+│    phone             │                  │                       │    gateway_txn_id     │
+│    website           │                  │                       └─────────────────────┘
+│    tax_id            │                  │
+│    default_currency  │                  │                       ┌─────────────────────┐
+│    fiscal_year_start │                  │                       │    INVOICE_TEMPLATE  │
+└─────────────────────┘                  │                       ├─────────────────────┤
+                                          │                       │ PK template_id       │
+┌─────────────────────┐                  │                       │ FK org_id             │
+│   RECURRING_SCHEDULE │                  │                       │    name               │
+├─────────────────────┤                  │                       │    header_html        │
+│ PK schedule_id       │                  │                       │    footer_html        │
+│ FK client_id         │◄─────────────────┘                       │    terms_text         │
+│ FK template_id       │  (if recurring)                          │    accent_color       │
+│    frequency         │                                          │    logo_position      │
+│    (weekly/monthly/  │         ┌─────────────────────┐         └─────────────────────┘
+│     quarterly/annual)│         │    TAX_RATE          │
+│    start_date        │         ├─────────────────────┤         ┌─────────────────────┐
+│    end_date          │         │ PK tax_id            │         │    CREDIT_NOTE       │
+│    next_invoice_date │         │ FK org_id             │         ├─────────────────────┤
+│    auto_send         │         │    name              │         │ PK credit_id         │
+│    status            │         │    rate              │         │ FK invoice_id        │
+└─────────────────────┘         │    region            │         │ FK client_id         │
+                                 │    is_compound       │         │    amount             │
+┌─────────────────────┐         │    active            │         │    reason             │
+│   ACTIVITY_LOG       │         └─────────────────────┘         │    issue_date         │
+├─────────────────────┤                                          │    applied_to_inv     │
+│ PK log_id            │         ┌─────────────────────┐         │    status             │
+│ FK invoice_id        │         │   EXPENSE            │         └─────────────────────┘
+│ FK user_id           │         ├─────────────────────┤
+│    action            │         │ PK expense_id        │
+│    (created/sent/    │         │ FK client_id         │
+│     viewed/paid/     │         │ FK invoice_id        │
+│     reminded/voided) │         │    category          │
+│    timestamp         │         │    description       │
+│    ip_address        │         │    amount            │
+│    metadata_json     │         │    receipt_url       │
+└─────────────────────┘         │    billable          │
+                                 │    expense_date      │
+                                 └─────────────────────┘`;
+
+// ============================================================
+//  NAVIGATION
+// ============================================================
+const tabs = document.querySelectorAll('.nav-tab');
+const pages = document.querySelectorAll('.page');
+let currentPage = 'dashboard';
+
+tabs.forEach(t => t.addEventListener('click', () => {
+  const target = t.dataset.page;
+  if (target === currentPage) return;
+  tabs.forEach(x => x.classList.remove('active'));
+  t.classList.add('active');
+  pages.forEach(p => p.classList.remove('active'));
+  document.getElementById('pg-' + target).classList.add('active');
+  currentPage = target;
+  if (target === 'dashboard') animateDashboard();
+  if (target === 'revenue3d') initThreeScene();
+}));
+
+// ============================================================
+//  GSAP - DASHBOARD ENTRANCE
+// ============================================================
+function animateDashboard() {
+  const cards = document.querySelectorAll('#pg-dashboard .card');
+  gsap.fromTo(cards,
+    { opacity: 0, y: 30 },
+    { opacity: 1, y: 0, duration: 0.5, stagger: 0.08, ease: 'power3.out' }
+  );
+}
+
+function animateCounters() {
+  const counters = [
+    { el: document.querySelector('#stat1 .stat-val'), target: 184, prefix: '$', suffix: 'K' },
+    { el: document.querySelector('#stat2 .stat-val'), target: 47, prefix: '$', suffix: 'K' },
+    { el: document.querySelector('#stat3 .stat-val'), target: 312, prefix: '', suffix: '' },
+    { el: document.querySelector('#stat4 .stat-val'), target: 4.2, prefix: '', suffix: 'd' },
+  ];
+  counters.forEach(c => {
+    const obj = { val: 0 };
+    gsap.to(obj, {
+      val: c.target,
+      duration: 1.8,
+      delay: 0.3,
+      ease: 'power2.out',
+      onUpdate: () => {
+        c.el.textContent = c.prefix + (c.target % 1 !== 0 ? obj.val.toFixed(1) : Math.round(obj.val).toLocaleString()) + c.suffix;
+      }
+    });
+  });
+}
+
+// ============================================================
+//  CHART.JS
+// ============================================================
+Chart.defaults.color = '#7d7b96';
+Chart.defaults.borderColor = 'rgba(35,37,56,0.6)';
+Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
+Chart.defaults.font.size = 11;
+
+function initCharts() {
+  // Revenue vs Collected
+  new Chart(document.getElementById('chartRevenue'), {
+    type: 'bar',
+    data: {
+      labels: MONTHS,
+      datasets: [
+        { label: 'Invoiced', data: [142,156,138,168,172,180,165,178,190,195,170,184], backgroundColor: 'rgba(59,130,246,.7)', borderRadius: 4 },
+        { label: 'Collected', data: [128,148,130,155,160,172,158,170,182,188,162,176], backgroundColor: 'rgba(34,197,94,.7)', borderRadius: 4 },
+      ]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': $' + ctx.parsed.y + 'K' } } }, scales: { y: { ticks: { callback: v => '$' + v + 'K' } } } }
+  });
+
+  // Status breakdown - doughnut
+  new Chart(document.getElementById('chartStatus'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Paid', 'Pending', 'Sent', 'Overdue', 'Draft'],
+      datasets: [{ data: [58, 18, 12, 8, 4], backgroundColor: ['#22c55e','#f59e0b','#3b82f6','#ef4444','#7d7b96'], borderWidth: 0 }]
+    },
+    options: { responsive: true, cutout: '65%', plugins: { legend: { position: 'bottom' } } }
+  });
+
+  // Top clients - horizontal bar
+  new Chart(document.getElementById('chartClients'), {
+    type: 'bar',
+    data: {
+      labels: ['Stark Enterprises', 'Wayne Industries', 'Globex Industries', 'Umbrella Co', 'Acme Corp', 'Initech LLC'],
+      datasets: [{ label: 'Revenue', data: [380, 244, 160, 108, 74, 29], backgroundColor: ['#3b82f6','#22c55e','#f59e0b','#a855f7','#06b6d4','#7d7b96'], borderRadius: 4 }]
+    },
+    options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => '$' + ctx.parsed.x + 'K' } } }, scales: { x: { ticks: { callback: v => '$' + v + 'K' } } } }
+  });
+
+  // Aging receivables
+  new Chart(document.getElementById('chartAging'), {
+    type: 'bar',
+    data: {
+      labels: ['Current', '1-15 days', '16-30 days', '31-60 days', '61-90 days', '90+ days'],
+      datasets: [{ label: 'Outstanding', data: [42, 18.5, 12, 7.2, 3.8, 2.1], backgroundColor: ['#22c55e','#3b82f6','#f59e0b','#f97316','#ef4444','#dc2626'], borderRadius: 4 }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => '$' + ctx.parsed.y + 'K' } } }, scales: { y: { ticks: { callback: v => '$' + v + 'K' } } } }
+  });
+}
+
+// ============================================================
+//  THREE.JS - 3D REVENUE CITYSCAPE
+// ============================================================
+let threeInited = false;
+function initThreeScene() {
+  if (threeInited) return;
+  threeInited = true;
+  const container = document.getElementById('revenue-3d');
+  const W = container.clientWidth, H = container.clientHeight;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x07080c);
+  scene.fog = new THREE.FogExp2(0x07080c, 0.008);
+
+  const camera = new THREE.PerspectiveCamera(50, W / H, 0.1, 500);
+  camera.position.set(35, 28, 35);
+  camera.lookAt(0, 0, 0);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(W, H);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  container.appendChild(renderer.domElement);
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0x334466, 0.5));
+  const dir = new THREE.DirectionalLight(0xffeedd, 0.7);
+  dir.position.set(20, 30, 10);
+  dir.castShadow = true;
+  scene.add(dir);
+  const pt = new THREE.PointLight(0x3b82f6, 0.6, 80);
+  pt.position.set(0, 20, 0);
+  scene.add(pt);
+
+  // Ground (office floor grid)
+  const gridHelper = new THREE.GridHelper(60, 30, 0x232538, 0x161822);
+  scene.add(gridHelper);
+  const groundGeo = new THREE.PlaneGeometry(60, 60);
+  const groundMat = new THREE.MeshLambertMaterial({ color: 0x0a0b10 });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -0.01;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // Client data for buildings
+  const clients = [
+    { name: 'Stark Enterprises', revenue: 380, color: 0x3b82f6, x: -10, z: -8 },
+    { name: 'Wayne Industries', revenue: 244, color: 0x22c55e, x: -4, z: -8 },
+    { name: 'Globex Industries', revenue: 160, color: 0xf59e0b, x: 2, z: -8 },
+    { name: 'Umbrella Co', revenue: 108, color: 0xa855f7, x: 8, z: -8 },
+    { name: 'Acme Corp', revenue: 74, color: 0x06b6d4, x: -7, z: 2 },
+    { name: 'Initech LLC', revenue: 29, color: 0x7d7b96, x: -1, z: 2 },
+  ];
+
+  const buildingGroup = new THREE.Group();
+
+  clients.forEach(c => {
+    const h = c.revenue / 15;
+    const w = 3.5, d = 3.5;
+
+    // Main building
+    const geo = new THREE.BoxGeometry(w, h, d);
+    const mat = new THREE.MeshPhongMaterial({ color: c.color, emissive: c.color, emissiveIntensity: 0.15, transparent: true, opacity: 0.85 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(c.x, h / 2, c.z);
+    mesh.castShadow = true;
+    buildingGroup.add(mesh);
+
+    // Window lines (horizontal)
+    const floors = Math.floor(h / 1.5);
+    for (let f = 0; f < floors; f++) {
+      const lineGeo = new THREE.BoxGeometry(w + 0.02, 0.05, d + 0.02);
+      const lineMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3 });
+      const line = new THREE.Mesh(lineGeo, lineMat);
+      line.position.set(c.x, 1 + f * 1.5, c.z);
+      buildingGroup.add(line);
+    }
+
+    // Glowing top cap
+    const capGeo = new THREE.BoxGeometry(w + 0.3, 0.15, d + 0.3);
+    const capMat = new THREE.MeshBasicMaterial({ color: c.color });
+    const cap = new THREE.Mesh(capGeo, capMat);
+    cap.position.set(c.x, h + 0.08, c.z);
+    buildingGroup.add(cap);
+
+    // Revenue label pillar (small glowing bar next to building)
+    const labelH = (c.revenue / 380) * 2;
+    const lGeo = new THREE.BoxGeometry(0.3, labelH, 0.3);
+    const lMat = new THREE.MeshBasicMaterial({ color: c.color });
+    const label = new THREE.Mesh(lGeo, lMat);
+    label.position.set(c.x + w / 2 + 0.5, labelH / 2, c.z + d / 2 + 0.5);
+    buildingGroup.add(label);
+  });
+
+  // Overdue "warning" towers
+  const overdueClients = [
+    { name: 'Globex', overdue: 38, x: 5, z: 2, color: 0xef4444 },
+    { name: 'Umbrella', overdue: 22.8, x: 11, z: 2, color: 0xef4444 },
+  ];
+  overdueClients.forEach(o => {
+    const h = o.overdue / 8;
+    const geo = new THREE.BoxGeometry(2, h, 2);
+    const mat = new THREE.MeshPhongMaterial({ color: o.color, emissive: o.color, emissiveIntensity: 0.3, transparent: true, opacity: 0.6 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(o.x, h / 2, o.z);
+    buildingGroup.add(mesh);
+
+    // Pulsing beacon
+    const beaconGeo = new THREE.SphereGeometry(0.3, 8, 8);
+    const beaconMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+    const beacon = new THREE.Mesh(beaconGeo, beaconMat);
+    beacon.position.set(o.x, h + 0.5, o.z);
+    beacon.userData.pulse = true;
+    buildingGroup.add(beacon);
+  });
+
+  scene.add(buildingGroup);
+
+  // Floating dollar particles
+  const particleCount = 80;
+  const particleGeo = new THREE.BufferGeometry();
+  const positions = new Float32Array(particleCount * 3);
+  for (let i = 0; i < particleCount; i++) {
+    positions[i * 3] = (Math.random() - 0.5) * 50;
+    positions[i * 3 + 1] = Math.random() * 30 + 2;
+    positions[i * 3 + 2] = (Math.random() - 0.5) * 50;
+  }
+  particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const particleMat = new THREE.PointsMaterial({ color: 0x3b82f6, size: 0.15, transparent: true, opacity: 0.6 });
+  const particles = new THREE.Points(particleGeo, particleMat);
+  scene.add(particles);
+
+  // GSAP entrance
+  gsap.from(camera.position, { y: 60, z: 60, duration: 2, ease: 'power2.out' });
+  gsap.from(buildingGroup.position, { y: -10, duration: 1.5, delay: 0.3, ease: 'back.out(1.2)' });
+
+  // Mouse orbit
+  let isDrag = false, prevX = 0, prevY = 0, theta = Math.PI / 4, phi = Math.PI / 5, radius = 45;
+  container.addEventListener('mousedown', e => { isDrag = true; prevX = e.clientX; prevY = e.clientY; });
+  window.addEventListener('mouseup', () => isDrag = false);
+  container.addEventListener('mousemove', e => {
+    if (!isDrag) return;
+    theta -= (e.clientX - prevX) * 0.005;
+    phi = Math.max(0.1, Math.min(Math.PI / 2.2, phi - (e.clientY - prevY) * 0.005));
+    prevX = e.clientX; prevY = e.clientY;
+  });
+  container.addEventListener('wheel', e => { radius = Math.max(15, Math.min(80, radius + e.deltaY * 0.05)); e.preventDefault(); }, { passive: false });
+
+  let clock = 0;
+  function animate() {
+    requestAnimationFrame(animate);
+    clock += 0.02;
+
+    // Pulse overdue beacons
+    buildingGroup.children.forEach(c => {
+      if (c.userData.pulse) {
+        c.scale.setScalar(1 + Math.sin(clock * 3) * 0.3);
+      }
+    });
+
+    // Float particles
+    const pos = particles.geometry.attributes.position.array;
+    for (let i = 0; i < particleCount; i++) {
+      pos[i * 3 + 1] += 0.02;
+      if (pos[i * 3 + 1] > 35) pos[i * 3 + 1] = 2;
+    }
+    particles.geometry.attributes.position.needsUpdate = true;
+
+    camera.position.x = radius * Math.sin(phi) * Math.cos(theta);
+    camera.position.y = radius * Math.cos(phi);
+    camera.position.z = radius * Math.sin(phi) * Math.sin(theta);
+    camera.lookAt(0, 0, 0);
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  window.addEventListener('resize', () => {
+    const w = container.clientWidth, h = container.clientHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+  });
+}
+
+// ============================================================
+//  TABLE
+// ============================================================
+function renderTable() {
+  document.getElementById('tbl-body').innerHTML = INVOICES.map(r => {
+    const bal = r.amount - r.paid;
+    return `<tr>
+      <td style="color:var(--accent)">${r.id}</td>
+      <td>${r.client}</td>
+      <td>${r.issued}</td>
+      <td>${r.due}</td>
+      <td>$${r.amount.toLocaleString()}</td>
+      <td>$${r.paid.toLocaleString()}</td>
+      <td style="color:${bal > 0 ? 'var(--red)' : 'var(--green)'}">$${bal.toLocaleString()}</td>
+      <td><span class="badge ${r.type}">${r.type.charAt(0).toUpperCase() + r.type.slice(1)}</span></td>
+      <td><span class="badge ${r.status}">${r.status.charAt(0).toUpperCase() + r.status.slice(1)}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+//  LINE ITEMS LOGIC
+// ============================================================
+function newLineRow() {
+  return `<tr><td><input type="text" placeholder="Service or product..."></td><td><input type="number" class="qty" value="1" min="1"></td><td><input type="number" class="price" value="0" step="0.01"></td><td class="line-total" style="padding:6px 8px;color:var(--text)">$0.00</td></tr>`;
+}
+document.getElementById('add-line-btn').addEventListener('click', () => {
+  document.getElementById('line-body').insertAdjacentHTML('beforeend', newLineRow());
+  bindLineCalc();
+  // GSAP animate new row
+  const rows = document.querySelectorAll('#line-body tr');
+  gsap.from(rows[rows.length - 1], { opacity: 0, x: -20, duration: 0.3, ease: 'power2.out' });
+});
+
+function calcTotals() {
+  let sub = 0;
+  document.querySelectorAll('#line-body tr').forEach(row => {
+    const qty = parseFloat(row.querySelector('.qty')?.value || 0);
+    const price = parseFloat(row.querySelector('.price')?.value || 0);
+    const total = qty * price;
+    row.querySelector('.line-total').textContent = '$' + total.toFixed(2);
+    sub += total;
+  });
+  const tax = sub * 0.08;
+  document.getElementById('subtotal').textContent = '$' + sub.toFixed(2);
+  document.getElementById('tax').textContent = '$' + tax.toFixed(2);
+  document.getElementById('grand-total').textContent = '$' + (sub + tax).toFixed(2);
+}
+
+function bindLineCalc() {
+  document.querySelectorAll('#line-body input').forEach(inp => {
+    inp.removeEventListener('input', calcTotals);
+    inp.addEventListener('input', calcTotals);
+  });
+}
+bindLineCalc();
+
+// ============================================================
+//  FORM
+// ============================================================
+document.getElementById('invoice-form').addEventListener('submit', e => {
+  e.preventDefault();
+  const client = document.getElementById('f-client').value;
+  const total = document.getElementById('grand-total').textContent;
+  showToast(`Invoice sent to ${client} for ${total}`);
+  gsap.fromTo('#pg-create .card', { borderColor: 'var(--green)' }, { borderColor: 'var(--border)', duration: 1.5 });
+});
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  gsap.fromTo(t, { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.3 });
+  gsap.to(t, { opacity: 0, y: -10, delay: 2.5, duration: 0.3 });
+}
+
+// ============================================================
+//  ERD
+// ============================================================
+document.getElementById('erd-pre').textContent = ERD_TEXT;
+
+// ============================================================
+//  INIT
+// ============================================================
+renderTable();
+initCharts();
+animateDashboard();
+animateCounters();
+</script>
+</body>
+</html>
